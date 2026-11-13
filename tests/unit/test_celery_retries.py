@@ -1,4 +1,5 @@
-from unittest.mock import MagicMock
+import uuid
+from unittest.mock import ANY, MagicMock
 
 import pytest
 from celery.exceptions import Retry
@@ -55,6 +56,11 @@ def run_task(doc_id, retries):
         process_document.pop_request()
 
 
+def token_used(mock_sync):
+    # The claim token the task generated for this run.
+    return mock_sync.call_args.args[1]
+
+
 def test_task_is_configured_for_three_retries():
     assert process_document.name == "documents.process_document"
     assert process_document.max_retries == 3
@@ -63,7 +69,7 @@ def test_task_is_configured_for_three_retries():
 def test_task_success_does_not_retry(mock_sync, mock_mark_failed, mock_retry):
     run_task(1, retries=0)
 
-    mock_sync.assert_called_once_with(1)
+    mock_sync.assert_called_once_with(1, ANY)
     mock_retry.assert_not_called()
     mock_mark_failed.assert_not_called()
 
@@ -107,7 +113,7 @@ def test_document_fails_after_retries_are_exhausted(
 
     assert raised.value is error
     mock_retry.assert_not_called()
-    mock_mark_failed.assert_called_once_with(1, str(error))
+    mock_mark_failed.assert_called_once_with(1, token_used(mock_sync), str(error))
 
 
 @pytest.mark.parametrize("make_error", PERMANENT_ERRORS)
@@ -120,7 +126,7 @@ def test_permanent_errors_never_retry(mock_sync, mock_mark_failed, mock_retry, m
 
     assert raised.value is error
     mock_retry.assert_not_called()
-    mock_mark_failed.assert_called_once_with(1, str(error))
+    mock_mark_failed.assert_called_once_with(1, token_used(mock_sync), str(error))
 
 
 def test_unexpected_error_marks_failed_without_retry(
@@ -132,15 +138,16 @@ def test_unexpected_error_marks_failed_without_retry(
         run_task(1, retries=0)
 
     mock_retry.assert_not_called()
-    mock_mark_failed.assert_called_once_with(1, "Unexpected problem.")
-
+    mock_mark_failed.assert_called_once_with(
+        1, token_used(mock_sync), "Unexpected problem."
+    )
 
 
 def test_retry_releases_claim_before_retrying(
     mock_sync, mock_mark_failed, mock_retry, mock_release_claim
 ):
     calls = []
-    mock_release_claim.side_effect = lambda doc_id: calls.append("release")
+    mock_release_claim.side_effect = lambda doc_id, token: calls.append("release")
     mock_retry.side_effect = lambda **kwargs: calls.append("retry") or Retry()
     mock_sync.side_effect = rate_limit_error()
 
@@ -148,7 +155,7 @@ def test_retry_releases_claim_before_retrying(
         run_task(1, retries=0)
 
     # The retried task must be able to claim the document again.
-    mock_release_claim.assert_called_once_with(1)
+    mock_release_claim.assert_called_once_with(1, token_used(mock_sync))
     assert calls == ["release", "retry"]
 
 
@@ -174,3 +181,14 @@ def test_permanent_errors_do_not_release_claim(
         run_task(1, retries=0)
 
     mock_release_claim.assert_not_called()
+
+
+def test_each_run_uses_a_new_uuid_claim_token(mock_sync, mock_mark_failed, mock_retry):
+    run_task(1, retries=0)
+    run_task(1, retries=1)
+
+    first_token, second_token = (call.args[1] for call in mock_sync.call_args_list)
+
+    assert str(uuid.UUID(first_token)) == first_token
+    # A retried run must not reuse the token of the run it replaces.
+    assert first_token != second_token

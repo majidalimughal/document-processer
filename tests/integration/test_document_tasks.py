@@ -18,6 +18,8 @@ from tests.anthropic_errors import (
     rate_limit_error,
 )
 
+WORKER_TOKEN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+
 
 def get_saved_document(db_session, doc_id):
     db_session.expire_all()
@@ -44,7 +46,7 @@ def test_process_document_sync_saves_summary(
 ):
     document = create_document_in_db(status="processing", last_error="Previous failure.")
 
-    process_document_sync(document.id)
+    process_document_sync(document.id, WORKER_TOKEN)
 
     mock_summarize_document.assert_called_once_with("This is a test document.")
 
@@ -53,6 +55,7 @@ def test_process_document_sync_saves_summary(
     assert saved_document.status == "processed"
     assert saved_document.last_error is None
     assert saved_document.processing_claimed_at is None
+    assert saved_document.claim_token is None
 
 
 def test_process_document_sync_keeps_claim_while_ai_runs(
@@ -69,7 +72,7 @@ def test_process_document_sync_keeps_claim_while_ai_runs(
 
     mock_summarize_document.side_effect = check_claim
 
-    process_document_sync(document.id)
+    process_document_sync(document.id, WORKER_TOKEN)
 
     # The claim is committed before the AI call, so other workers can see it.
     assert claimed_at_during_ai_call[0] is not None
@@ -82,12 +85,13 @@ def test_process_document_sync_ai_error_keeps_claim(
     document = create_document_in_db(status="processing")
 
     with pytest.raises(type(mock_summarize_document.side_effect)):
-        process_document_sync(document.id)
+        process_document_sync(document.id, WORKER_TOKEN)
 
     # The Celery task decides whether to release the claim or fail the document.
     saved_document = get_saved_document(db_session, document.id)
     assert saved_document.status == "processing"
     assert saved_document.processing_claimed_at is not None
+    assert saved_document.claim_token == WORKER_TOKEN
 
 
 @pytest.mark.parametrize(
@@ -97,7 +101,11 @@ def test_process_document_sync_ai_error_keeps_claim(
         {"status": "failed"},
         {"status": "processed", "summary": "Existing summary."},
         {"status": "processing", "summary": "Existing summary."},
-        {"status": "processing", "processing_claimed_at": datetime.now(timezone.utc)},
+        {
+            "status": "processing",
+            "processing_claimed_at": datetime.now(timezone.utc),
+            "claim_token": "another-worker",
+        },
     ],
     ids=["pending", "failed", "processed", "has-summary", "already-claimed"],
 )
@@ -106,7 +114,7 @@ def test_process_document_sync_skips_documents_it_cannot_claim(
 ):
     document = create_document_in_db(**fields)
 
-    process_document_sync(document.id)
+    process_document_sync(document.id, WORKER_TOKEN)
 
     mock_summarize_document.assert_not_called()
 
@@ -116,7 +124,7 @@ def test_process_document_sync_skips_documents_it_cannot_claim(
 
 
 def test_process_document_sync_missing_document(db_session, mock_summarize_document):
-    process_document_sync(9999)
+    process_document_sync(9999, WORKER_TOKEN)
 
     mock_summarize_document.assert_not_called()
     assert db_session.query(Document).count() == 0
@@ -128,7 +136,7 @@ def test_process_document_sync_empty_content_raises(
     document = create_document_in_db(content="", status="processing")
 
     with pytest.raises(ValueError, match="Document content is empty"):
-        process_document_sync(document.id)
+        process_document_sync(document.id, WORKER_TOKEN)
 
     mock_summarize_document.assert_not_called()
 
@@ -138,19 +146,22 @@ def test_process_document_sync_empty_content_raises(
 
 def test_mark_document_failed(db_session, create_document_in_db):
     document = create_document_in_db(
-        status="processing", processing_claimed_at=datetime.now(timezone.utc)
+        status="processing",
+        processing_claimed_at=datetime.now(timezone.utc),
+        claim_token=WORKER_TOKEN,
     )
 
-    mark_document_failed(document.id, "Something went wrong.")
+    mark_document_failed(document.id, WORKER_TOKEN, "Something went wrong.")
 
     saved_document = get_saved_document(db_session, document.id)
     assert saved_document.status == "failed"
     assert saved_document.last_error == "Something went wrong."
     assert saved_document.processing_claimed_at is None
+    assert saved_document.claim_token is None
 
 
 def test_mark_document_failed_missing_document(db_session):
-    mark_document_failed(9999, "Something went wrong.")
+    mark_document_failed(9999, WORKER_TOKEN, "Something went wrong.")
 
     assert db_session.query(Document).count() == 0
 
@@ -160,14 +171,17 @@ def test_mark_document_failed_missing_document(db_session):
 
 def test_release_document_claim(db_session, create_document_in_db):
     document = create_document_in_db(
-        status="processing", processing_claimed_at=datetime.now(timezone.utc)
+        status="processing",
+        processing_claimed_at=datetime.now(timezone.utc),
+        claim_token=WORKER_TOKEN,
     )
 
-    release_document_claim(document.id)
+    release_document_claim(document.id, WORKER_TOKEN)
 
     saved_document = get_saved_document(db_session, document.id)
     assert saved_document.status == "processing"
     assert saved_document.processing_claimed_at is None
+    assert saved_document.claim_token is None
 
 
 @pytest.mark.parametrize("status", ["pending", "processed", "failed"])
@@ -175,11 +189,15 @@ def test_release_document_claim_ignores_other_statuses(
     db_session, create_document_in_db, status
 ):
     claimed_at = datetime.now(timezone.utc)
-    document = create_document_in_db(status=status, processing_claimed_at=claimed_at)
+    document = create_document_in_db(
+        status=status, processing_claimed_at=claimed_at, claim_token=WORKER_TOKEN
+    )
 
-    release_document_claim(document.id)
+    release_document_claim(document.id, WORKER_TOKEN)
 
-    assert get_saved_document(db_session, document.id).processing_claimed_at == claimed_at
+    saved_document = get_saved_document(db_session, document.id)
+    assert saved_document.processing_claimed_at == claimed_at
+    assert saved_document.claim_token == WORKER_TOKEN
 
 
 # ---------- Celery task (eager mode) ----------
@@ -230,6 +248,7 @@ def test_rate_limit_retries_with_backoff_then_fails(
     assert saved_document.last_error == str(error)
     assert saved_document.summary is None
     assert saved_document.processing_claimed_at is None
+    assert saved_document.claim_token is None
 
 
 def test_rate_limit_then_success_on_retry(

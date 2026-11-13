@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from document_tasks import process_document, process_document_sync
 from main import app
+from models import Document
 from outbox_dispatcher import dispatch_pending_events
 from outbox_models import OutboxEvent
 
@@ -47,7 +48,7 @@ def test_only_one_request_can_claim_document(db_session, create_document_in_db):
 
 
 def test_only_one_worker_can_process_document(
-    create_document_in_db, mock_summarize_document
+    db_session, create_document_in_db, mock_summarize_document
 ):
     document = create_document_in_db(status="processing")
 
@@ -58,9 +59,16 @@ def test_only_one_worker_can_process_document(
 
     mock_summarize_document.side_effect = slow_summary
 
-    run_at_the_same_time(lambda: process_document_sync(document.id))
+    tokens = iter(["worker-a", "worker-b"])
+    run_at_the_same_time(lambda: process_document_sync(document.id, next(tokens)))
 
     mock_summarize_document.assert_called_once()
+
+    # The winner finished and handed the document back without an owner.
+    db_session.expire_all()
+    saved_document = db_session.get(Document, document.id)
+    assert saved_document.status == "processed"
+    assert saved_document.claim_token is None
 
 
 def test_concurrent_dispatchers_publish_each_event_once(
