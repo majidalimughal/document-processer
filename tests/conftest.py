@@ -23,7 +23,10 @@ celery_app.conf.update(
 )
 
 # Never let the tests touch the development database.
-if make_url(settings.test_database_url).database == make_url(settings.database_url).database:
+if (
+    make_url(settings.test_database_url).database
+    == make_url(settings.database_url).database
+):
     raise RuntimeError("TEST_DATABASE_URL must point to a separate database.")
 
 # Creating the engine does not connect, so unit tests run without PostgreSQL.

@@ -138,7 +138,9 @@ def test_last_attempt_is_still_recovered(db_session, create_stuck_document):
     assert saved_document.retry_count == MAX_ATTEMPTS - 1
 
 
-@pytest.mark.parametrize("retry_count", [MAX_ATTEMPTS - 1, MAX_ATTEMPTS, MAX_ATTEMPTS + 3])
+@pytest.mark.parametrize(
+    "retry_count", [MAX_ATTEMPTS - 1, MAX_ATTEMPTS, MAX_ATTEMPTS + 3]
+)
 def test_exhausted_documents_are_marked_failed(
     db_session, create_stuck_document, retry_count
 ):

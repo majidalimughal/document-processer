@@ -1,4 +1,5 @@
 from apscheduler.schedulers.blocking import BlockingScheduler
+
 from recovery_service import recover_stuck_documents
 
 scheduler = BlockingScheduler(timezone="UTC")
@@ -8,7 +9,8 @@ def run_recovery():
     try:
         recovered = recover_stuck_documents()
         print(f"Recovery completed. Documents recovered: {len(recovered)}")
-    except Exception as e:
+    # Catch everything so one failed run doesn't stop the scheduler.
+    except Exception as e:  # noqa: BLE001
         print(f"Recovery failed: {e}")
 
 

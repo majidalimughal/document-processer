@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Runs before every commit: lint and format checks on staged files, then tests.
+# Skip once with: git commit --no-verify
+
+set -uo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+RED=$'\033[31m'
+GREEN=$'\033[32m'
+YELLOW=$'\033[33m'
+RESET=$'\033[0m'
+
+fail() {
+    echo "${RED}✗ $1${RESET}"
+    echo "${YELLOW}$2${RESET}"
+    echo "Commit aborted. Skip checks once with: git commit --no-verify"
+    exit 1
+}
+
+if [ -x .venv/bin/python ]; then
+    PYTHON=.venv/bin/python
+else
+    PYTHON=python3
+fi
+
+if ! "$PYTHON" -m ruff --version >/dev/null 2>&1; then
+    fail "Ruff is not installed." "Run: $PYTHON -m pip install -r requirements-dev.txt"
+fi
+
+# ---------- 1. Lint and format staged Python files ----------
+
+STAGED_FILES=()
+while IFS= read -r -d '' file; do
+    STAGED_FILES+=("$file")
+done < <(git diff --cached --name-only --diff-filter=ACMR -z -- '*.py')
+
+if [ ${#STAGED_FILES[@]} -gt 0 ]; then
+    echo "Checking lint and formatting on ${#STAGED_FILES[@]} staged file(s)..."
+
+    LINT_FAILED=()
+    FORMAT_FAILED=()
+
+    for file in "${STAGED_FILES[@]}"; do
+        # Check the staged content, which is what will be committed.
+        if ! git show ":$file" | "$PYTHON" -m ruff check --quiet --stdin-filename "$file" - ; then
+            LINT_FAILED+=("$file")
+        fi
+
+        if ! git show ":$file" | "$PYTHON" -m ruff format --check --quiet --stdin-filename "$file" - >/dev/null 2>&1; then
+            FORMAT_FAILED+=("$file")
+        fi
+    done
+
+    if [ ${#LINT_FAILED[@]} -gt 0 ] || [ ${#FORMAT_FAILED[@]} -gt 0 ]; then
+        [ ${#LINT_FAILED[@]} -gt 0 ] && printf '  lint issues:  %s\n' "${LINT_FAILED[@]}"
+        [ ${#FORMAT_FAILED[@]} -gt 0 ] && printf '  needs format: %s\n' "${FORMAT_FAILED[@]}"
+        fail "Lint or formatting checks failed." \
+            "Run ./scripts/lint.sh, then 'git add' the fixed files and commit again."
+    fi
+
+    echo "${GREEN}✓ Lint and formatting passed${RESET}"
+else
+    echo "No staged Python files; skipping lint."
+fi
+
+# ---------- 2. Run the test suite ----------
+
+echo "Running tests..."
+
+# Belt and braces: tests already mock these, but never reach real services.
+export ANTHROPIC_API_KEY="pre-commit-fake-key"
+export REDIS_URL="redis://127.0.0.1:1/0"
+
+if ! "$PYTHON" -m pytest -q -p no:cacheprovider; then
+    fail "Tests failed." \
+        "Fix the failing tests. Integration tests need PostgreSQL: docker compose up -d db"
+fi
+
+echo "${GREEN}✓ Tests passed${RESET}"

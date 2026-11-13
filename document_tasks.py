@@ -1,18 +1,19 @@
+import uuid
+from datetime import datetime, timezone
+
+import anthropic
+from sqlalchemy import update
+
+from ai_service import summarize_document
+from celery_app import celery_app
 from database import SessionLocal
 from models import Document
-from celery_app import celery_app
-from ai_service import summarize_document
-from sqlalchemy import update
-from datetime import datetime, timezone
-import uuid
-import anthropic
 
 
 def process_document_sync(doc_id: int, claim_token: str):
     db = SessionLocal()
 
     try:
-
         claim_statement = (
             update(Document)
             .where(
@@ -80,7 +81,6 @@ def process_document_sync(doc_id: int, claim_token: str):
 def mark_document_failed(doc_id: int, claim_token: str, error_message: str):
     db = SessionLocal()
     try:
-
         db.execute(
             update(Document)
             .where(
@@ -123,14 +123,14 @@ def process_document(self, doc_id: int):
         anthropic.RateLimitError,
         anthropic.InternalServerError,
     ) as error:
-
         if self.request.retries >= self.max_retries:
             mark_document_failed(doc_id, claim_token, str(error))
             raise
 
         release_document_claim(doc_id, claim_token)
 
-        raise self.retry(
+        # Celery's documented retry pattern; retry() chains exc itself.
+        raise self.retry(  # noqa: B904
             exc=error,
             countdown=5 * (2**self.request.retries),
         )

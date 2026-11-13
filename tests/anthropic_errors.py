@@ -24,7 +24,9 @@ def authentication_error():
 
 
 def internal_server_error():
-    return make_status_error(anthropic.InternalServerError, 500, "Internal server error.")
+    return make_status_error(
+        anthropic.InternalServerError, 500, "Internal server error."
+    )
 
 
 def connection_error():

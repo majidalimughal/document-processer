@@ -1,8 +1,7 @@
-
 from models import Document
 
 
-def test_create_document(test_client,db_session):
+def test_create_document(test_client, db_session):
     response = test_client.post(
         "/documents",
         json={
@@ -24,9 +23,7 @@ def test_create_document(test_client,db_session):
 
     try:
         saved_document = (
-            db.query(Document)
-            .filter(Document.filename == "report.pdf")
-            .first()
+            db.query(Document).filter(Document.filename == "report.pdf").first()
         )
 
         assert saved_document is not None

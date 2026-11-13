@@ -1,10 +1,11 @@
 """baseline documents
 
 Revision ID: acaf9a5a85b2
-Revises: 
+Revises:
 Create Date: 2026-11-10 02:33:51.808525
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -12,11 +13,10 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'acaf9a5a85b2'
+revision: str = "acaf9a5a85b2"
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
-
 
 
 def upgrade() -> None:
@@ -54,4 +54,3 @@ def downgrade() -> None:
     """Remove the baseline documents table."""
     op.drop_index("ix_documents_id", table_name="documents")
     op.drop_table("documents")
-

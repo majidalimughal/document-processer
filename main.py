@@ -1,12 +1,14 @@
-from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from typing import Literal
+
+from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import case, update
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
+
 from database import get_db
 from models import Document
 from outbox_models import OutboxEvent
-from sqlalchemy.orm import Session
-from typing import Literal
-from sqlalchemy import update, case
-from sqlalchemy.dialects.postgresql import insert
 
 app = FastAPI(title="AI Document API")
 
@@ -115,7 +117,6 @@ def summarize_document(
     db: Session = Depends(get_db),
 ):
 
-    
     claim_statement = (
         update(Document)
         .where(
@@ -130,7 +131,8 @@ def summarize_document(
                 (Document.status == "failed", Document.retry_count + 1),
                 else_=Document.retry_count,
             ),
-        ).returning(Document.retry_count)
+        )
+        .returning(Document.retry_count)
     )
 
     try:
@@ -172,9 +174,7 @@ def summarize_document(
                 payload={"doc_id": doc_id},
                 status="pending",
             )
-            .on_conflict_do_nothing(
-                index_elements=[OutboxEvent.idempotency_key]
-            )
+            .on_conflict_do_nothing(index_elements=[OutboxEvent.idempotency_key])
         )
 
         event_result = db.execute(insert_outbox_event_statement)
@@ -184,7 +184,6 @@ def summarize_document(
                 status_code=409,
                 detail="Processing event already exists.",
             )
-
 
         db.commit()
 
@@ -197,7 +196,6 @@ def summarize_document(
     except Exception:
         db.rollback()
         raise
-
 
 
 def commit_document_transaction(document: Document, db: Session) -> Document:

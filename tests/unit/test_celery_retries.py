@@ -90,7 +90,9 @@ def test_rate_limit_error_retries_with_exponential_backoff(
 
 
 @pytest.mark.parametrize("make_error", RETRYABLE_ERRORS)
-def test_transient_errors_are_retried(mock_sync, mock_mark_failed, mock_retry, make_error):
+def test_transient_errors_are_retried(
+    mock_sync, mock_mark_failed, mock_retry, make_error
+):
     error = make_error()
     mock_sync.side_effect = error
 
@@ -117,7 +119,9 @@ def test_document_fails_after_retries_are_exhausted(
 
 
 @pytest.mark.parametrize("make_error", PERMANENT_ERRORS)
-def test_permanent_errors_never_retry(mock_sync, mock_mark_failed, mock_retry, make_error):
+def test_permanent_errors_never_retry(
+    mock_sync, mock_mark_failed, mock_retry, make_error
+):
     error = make_error()
     mock_sync.side_effect = error
 

@@ -1,14 +1,12 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
-from database import Base
 import models
 import outbox_models
 from config import settings
+from database import Base
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -26,7 +24,7 @@ database_urls = {
 
 if db_target not in database_urls:
     raise ValueError(
-        f"Invalid database target: {db_target}. " "Use -x db=dev or -x db=test."
+        f"Invalid database target: {db_target}. Use -x db=dev or -x db=test."
     )
 
 database_url = database_urls[db_target]

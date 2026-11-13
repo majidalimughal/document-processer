@@ -60,7 +60,11 @@ def test_recovery_builds_one_event_per_document(mock_db):
     params = insert_sql.params
     assert params["idempotency_key_m0"] == "document.process:1:1"
     assert params["idempotency_key_m1"] == "document.process:2:3"
-    assert params["payload_m1"] == {"doc_id": 2, "retry_count": 3, "last_error": "Timeout."}
+    assert params["payload_m1"] == {
+        "doc_id": 2,
+        "retry_count": 3,
+        "last_error": "Timeout.",
+    }
 
 
 def test_recovery_skips_insert_when_nothing_recovered(mock_db):

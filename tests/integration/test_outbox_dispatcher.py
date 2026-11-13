@@ -112,7 +112,10 @@ def test_dispatch_keeps_earlier_events_published_when_a_later_one_fails(
     with pytest.raises(ConnectionError):
         dispatch_pending_events()
 
-    assert [event.status for event in get_events(db_session)] == ["published", "pending"]
+    assert [event.status for event in get_events(db_session)] == [
+        "published",
+        "pending",
+    ]
 
 
 def test_dispatch_skips_events_locked_by_another_dispatcher(

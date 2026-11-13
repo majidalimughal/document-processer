@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert
@@ -38,11 +38,7 @@ def recover_stuck_documents():
             )
         )
 
-        recovered_documents = (
-            db.execute(recovered_document_statement)
-            .mappings()
-            .all()
-        )
+        recovered_documents = db.execute(recovered_document_statement).mappings().all()
 
         # Build one event per recovered document.
         outbox_events = [
@@ -66,9 +62,7 @@ def recover_stuck_documents():
             insert_outbox_events_statement = (
                 insert(OutboxEvent)
                 .values(outbox_events)
-                .on_conflict_do_nothing(
-                    index_elements=[OutboxEvent.idempotency_key]
-                )
+                .on_conflict_do_nothing(index_elements=[OutboxEvent.idempotency_key])
             )
 
             db.execute(insert_outbox_events_statement)

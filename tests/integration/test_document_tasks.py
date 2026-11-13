@@ -44,7 +44,9 @@ def requested_countdowns(retry_spy):
 def test_process_document_sync_saves_summary(
     db_session, create_document_in_db, mock_summarize_document
 ):
-    document = create_document_in_db(status="processing", last_error="Previous failure.")
+    document = create_document_in_db(
+        status="processing", last_error="Previous failure."
+    )
 
     process_document_sync(document.id, WORKER_TOKEN)
 

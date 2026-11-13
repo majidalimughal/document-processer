@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import String, DateTime, JSON
+from sqlalchemy import JSON, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database import Base
@@ -29,10 +29,7 @@ class OutboxEvent(Base):
     )
 
     idempotency_key: Mapped[str] = mapped_column(
-        String(255), 
-        unique=True, 
-        nullable=False, 
-        index=True
+        String(255), unique=True, nullable=False, index=True
     )
 
     created_at: Mapped[datetime] = mapped_column(

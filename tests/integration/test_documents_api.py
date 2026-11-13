@@ -167,8 +167,6 @@ def test_get_document_invalid_id(test_client):
     assert response.status_code == 422
 
 
-
-
 # ---------- POST /documents/{doc_id}/summarize ----------
 
 
@@ -409,6 +407,8 @@ def test_full_flow_fails_then_succeeds_on_user_retry(
 def test_patch_endpoint_is_disabled(test_client, create_document_in_db):
     document = create_document_in_db()
 
-    response = test_client.patch(f"/documents/{document.id}", json={"status": "processed"})
+    response = test_client.patch(
+        f"/documents/{document.id}", json={"status": "processed"}
+    )
 
     assert response.status_code == 405

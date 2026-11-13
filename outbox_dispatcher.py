@@ -1,11 +1,10 @@
-
 from datetime import datetime, timezone
 
 from sqlalchemy import select
 
 from database import SessionLocal
-from outbox_models import OutboxEvent
 from document_tasks import process_document
+from outbox_models import OutboxEvent
 
 
 def dispatch_pending_events(batch_size: int = 10):
