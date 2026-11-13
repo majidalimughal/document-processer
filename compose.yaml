@@ -1,0 +1,37 @@
+
+services:
+  db:
+    image: postgres:17
+    container_name: ai-document-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ai_documents
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: local_dev_password
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_user -d ai_documents"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-document-redis
+    command: redis-server --appendonly yes
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5    
+
+volumes:
+  postgres_data:
+  redis_data:
