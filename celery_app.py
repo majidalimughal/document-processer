@@ -4,7 +4,10 @@ from config import settings
 celery_app = Celery(
     "document_processor",
     broker=settings.redis_url,
-    include=["document_tasks"],
+    include=[
+        "document_tasks",
+        "tasks.recovery_tasks",
+    ],
 )
 
 celery_app.conf.update(
@@ -14,3 +17,10 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
 )
+
+celery_app.conf.beat_schedule = {
+    "recover-stuck-documents-every-two-minutes": {
+        "task": "tasks.recover_stuck_documents",
+        "schedule": 120.0,
+    },
+}

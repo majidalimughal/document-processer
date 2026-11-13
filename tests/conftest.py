@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 import database
 import document_tasks
 import outbox_dispatcher
+import recovery_service
 from celery_app import celery_app
 from config import settings
 from database import Base, get_db
@@ -64,6 +65,7 @@ def use_test_database(monkeypatch):
     monkeypatch.setattr(database, "SessionLocal", TestingSessionLocal)
     monkeypatch.setattr(document_tasks, "SessionLocal", TestingSessionLocal)
     monkeypatch.setattr(outbox_dispatcher, "SessionLocal", TestingSessionLocal)
+    monkeypatch.setattr(recovery_service, "SessionLocal", TestingSessionLocal)
 
 
 @pytest.fixture(scope="session")
